@@ -8,16 +8,24 @@ import java.io.InputStream;
 import javax.servlet.ServletException;
 import javax.servlet.jsp.PageContext;
 
-import org.jivesoftware.smack.MessageListener;
 import org.jivesoftware.smack.Chat;
 import org.jivesoftware.smack.packet.Message;
+
+import org.jivesoftware.smack.MessageListener;
+import org.jivesoftware.smack.ChatManagerListener;
+
+import org.jivesoftware.smackx.ChatStateListener;
+import org.jivesoftware.smackx.ChatState;
+import org.jivesoftware.smackx.filetransfer.FileTransferListener;
+import org.jivesoftware.smackx.filetransfer.FileTransferRequest;
+import org.jivesoftware.smackx.MessageEventNotificationListener;
 
 import railo.runtime.Component;
 import railo.runtime.PageContextImpl;
 import railo.loader.engine.CFMLEngineFactory;
 import railo.loader.engine.CFMLEngine;
 
-public class RailoMessageListener implements MessageListener {
+public class RailoMessageListener implements MessageListener, ChatManagerListener, ChatStateListener, FileTransferListener {
 
 	Component listener;
 	PageContextImpl pc;
@@ -36,7 +44,34 @@ public class RailoMessageListener implements MessageListener {
     		e.printStackTrace();
     	}
 	}
+	
+	public void chatCreated(Chat chat, boolean createdLocally) {
+		System.out.println("chatCreated listener called");
+		try{
+			listener.call( pc, "chatCreated", new Object[]{ chat, createdLocally});
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
+	public void stateChanged(Chat chat, ChatState state)  {
+		System.out.println("chatCreated listener called");
+		try{
+			listener.call( pc, "stateChanged", new Object[]{ chat, state});
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
 
+	public void fileTransferRequest(FileTransferRequest request)  {
+		System.out.println("chatCreated listener called");
+		try{
+			listener.call( pc, "fileTransferRequest", new Object[]{ request });
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
 /*
 	@Override
 	public void deliver(String from, String recipient, InputStream data) throws IOException {

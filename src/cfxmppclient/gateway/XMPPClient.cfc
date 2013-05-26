@@ -95,6 +95,10 @@ component {
 		}
 		_connect();
 		variables.XMPPConnection.login(userID, password);
+		//var listener = newListener("org.jivesoftware.smack.ChatManagerListener", new MessageListener().init());
+		var listener = cl.create("cfxmppclient.RailoMessageListener").init();
+		listener.setComponent(new MessageListener().init(),server[variables.connectionhash].pc);
+		variables.XMPPConnection.getChatManager().addChatListener(listener);
 	}
 
 	function _getUser() {
@@ -134,10 +138,20 @@ component {
 		listener.setComponent(new MessageListener().init(),server[variables.connectionhash].pc);
 		chat.addMessageListener(listener);
 		if(len(message)) {
+			createObject("java","java.lang.System").out.println("Sending mess");
 			chat.sendMessage( message );
 		}
 		//arrayAppend(variables.chats[variables.connectionhash],chat);
 		return chat;
+	}
+	
+	private function newListener(class,cfc) {
+		var tl = cl.create("com.googlecode.transloader.Transloader").DEFAULT;
+		class = cl.getLoader().getURLClassLoader().loadClass(class);
+		var listener = cl.create("cfxmppclient.RailoMessageListener").init();
+		listener.setComponent(cfc,server[variables.connectionhash].pc);
+		var listenerWrapped = tl.wrap(listener).makeCastableTo(class);
+		return listenerWrapped;
 	}
 
 	function _randomJavaTests() {
@@ -273,9 +287,6 @@ component {
 			var theMethod = this[methodName];
 			return theMethod(argumentCollection=args);
 		} catch (any e) {
-			try{
-				_stop();
-			} catch(any err) {}
 			jThread.currentThread().setContextClassLoader(cTL);
 			throw(e);
 		}
