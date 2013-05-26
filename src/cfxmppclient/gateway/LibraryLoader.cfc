@@ -84,6 +84,7 @@
 
 	<cffunction name="init" hint="Constructor" access="public" returntype="any" output="false">
 		<cfargument name="pathlist" default="">
+		<cfargument name="loadColdFusionClassPath" default="false">
 		<cfscript>
 			var key = instance.static.uuid;
 			if (NOT structKeyExists(server,key)) {
@@ -97,7 +98,7 @@
 				}
 				//server[key] = createObject("component", "javaloader.JavaLoader").init(loadPaths=loadPaths,loadColdFusionClassPath=false,sourceDirectories=[getDirectoryFromPath(getMetaData(this).path)&"java/"]);
 				//server[key] = createObject("component", "javaloader.JavaLoader").init(loadPaths=loadPaths,loadColdFusionClassPath=false,parentClassloader=loadpaths.getClass().classLoader.getParent().getParent());
-				server[key] = createObject("component", "javaloader.JavaLoader").init(loadPaths=loadPaths,loadColdFusionClassPath=false);
+				server[key] = createObject("component", "javaloader.JavaLoader").init(loadPaths=loadPaths,loadColdFusionClassPath=loadColdFusionClassPath);
 				instance.initialized = true;
 			}
 			return this;

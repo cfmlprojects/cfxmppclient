@@ -1,7 +1,7 @@
 component {
 
 	thisDir = getDirectoryFromPath(getMetaData(this).path);
-  	cl = new LibraryLoader(thisDir & "lib/").init();
+  	cl = new LibraryLoader(thisDir & "lib/",true).init();
 	jThread = cl.create("java.lang.Thread");
 	jSASLAuthentication = cl.create("org.jivesoftware.smack.SASLAuthentication");
 	jConnectionConfiguration = cl.create("org.jivesoftware.smack.ConnectionConfiguration");
@@ -26,24 +26,28 @@ component {
 	variables.onAddBuddyRequest = "";
 	variables.onAddBuddyRequest = "";
 	variables.onAddBuddyResponse = "";
+	variables.chats = {};
 	variables.XMPPConnection = "";
 	
 	function init() {
-		variables.host = arguments.host;
-		variables.serverport = arguments.serverport;
-		variables.userID = arguments.userID;
-		variables.password = arguments.password;
-		variables.authtype = arguments.authtype;
-		variables.callbackURL = arguments.callbackURL;
-		variables.connectionhash = "__cfxmppclient" & hash(variables.host & variables.userID & variables.password); 
+		for(var arg in arguments) {
+			variables[arg] = arguments[arg];
+		}
+		variables.connectionhash = "__cfxmppclient" & hash(variables.host & variables.userID & variables.password);
 		return this;
 	}
 
-	function _stop() {
+	function _disconnect() {
 	    variables.XMPPConnection.disconnect();
+		variables.authenticated = false;
 	}
 
-	function _start() {
+	function _stop() {
+		createObject("java","java.lang.System").out.println("Stopping...");
+		_disconnect();
+	}
+
+	private function getConnection() {
 		if(!structKeyExists(server, variables.connectionhash)) {
 			if(variables.authtype == "facebook") {
 				initializeFacebook();
@@ -52,28 +56,59 @@ component {
 			if(variables.authtype == "facebook" || variables.authtype == "sasl") {
 				config.setSASLAuthenticationEnabled(true);
 			}
-			XMPPConnection = jXMPPConnection.init(config);
+			variables.XMPPConnection = jXMPPConnection.init(config);
 			//XMPPConnection.DEBUG_ENABLED = true;
-			//systemOutput(XMPPConnection.isConnected());
-			//systemOutput(XMPPConnection.isAuthenticated());
-			server["__cfxmppclient"] = XMPPConnection;
-			server["__cfxmppclient"].connect();
+			server[variables.connectionhash] = {
+				connection = variables.XMPPConnection,
+				pc = getPageContext() };
 		}
-		variables.XMPPConnection = server["__cfxmppclient"];
-		variables.XMPPConnection.login(variables.userID, variables.password);
+		variables.XMPPConnection = server[variables.connectionhash].connection; 
+		return variables.XMPPConnection;
+	}
+
+	function _start() {
+		createObject("java","java.lang.System").out.println("Starting...");
+		variables.XMPPConnection = getConnection();
+	}
+
+	function _connect() {
+		variables.XMPPConnection = getConnection();
+		if(!variables.XMPPConnection.isConnected()) {
+			variables.XMPPConnection.connect();
+		}
+	}
+
+	function _isConnected() {
+		variables.XMPPConnection = getConnection();
+		return variables.XMPPConnection.isConnected();
+	}
+
+	function _isAuthenticated() {
+		variables.XMPPConnection = getConnection();
+		return variables.XMPPConnection.isAuthenticated();
+	}
+
+	function _login(userID=variables.userId, password= variables.password) {
+		variables.XMPPConnection = getConnection();
+		if(variables.XMPPConnection.isConnected()) {
+			_disconnect();
+		}
+		_connect();
+		variables.XMPPConnection.login(userID, password);
+	}
+
+	function _getUser() {
+		var user = getConnection().getUser();
+		return isNull(user) ? "" : user;
 	}
 
 	function _getBuddies() {
-		var roster = variables.XMPPConnection.getRoster();
-		var entries = roster.getEntries().iterator();
+		var roster = getConnection().getRoster();
+		var entries = roster.getEntries().toArray();
 		var buddies = [];
-		dump(roster);
-		while(entries.hasNext()) {
-			var entry = entries.next();
-			var groupsIt = entry.getGroups().iterator();
+		for(var entry in entries) {
 			var groups = [];
-			while(groupsIt.hasNext()) {
-				var groupOb = groupsIt.next();
+			for(var groupOb in entry.getGroups().toArray()) {
 				var group = {
 						name:groupOb.getName(),
 						type:groupOb.getEntryCount()
@@ -89,15 +124,65 @@ component {
 				};
 			arrayAppend(buddies,buddy);
 		}
-		dump(buddies);
-		abort;
+		return buddies;
 	}
 
-	function _sendMessage(userName, message) {
-		try {
-			chat = variables.XMPPConnection.getChatManager().createChat( userName, null );
+	function _chat(user, message="") {
+		//var listener = createDynamicProxy(new MessageListener(), ["org.jivesoftware.smack.MessageListener"]);
+		var chat = getConnection().getChatManager().createChat( user , javacast("null",""));
+		var listener = cl.create("cfxmppclient.RailoMessageListener").init();
+		listener.setComponent(new MessageListener().init(),server[variables.connectionhash].pc);
+		chat.addMessageListener(listener);
+		if(len(message)) {
 			chat.sendMessage( message );
-			return true;
+		}
+		//arrayAppend(variables.chats[variables.connectionhash],chat);
+		return chat;
+	}
+
+	function _randomJavaTests() {
+		tl = cl.create("com.googlecode.transloader.Transloader").DEFAULT;
+		//tl = createObject("java","com.googlecode.transloader.Transloader").DEFAULT;
+		jMessageListener = cl.getLoader().getURLClassLoader().loadClass("org.jivesoftware.smack.MessageListener");
+		jCListen = cl.create("org.jivesoftware.smack.MessageListener");
+		var pc = getPageContext();
+		jRListener = cl.create("cfxmppclient.RailoMessageListener").init(pc,this);
+		var railoCL = pc.getConfig().getClassLoader();
+		var cfListener = new MessageListener();
+		var someObjectWrapped = tl.wrap(jRListener);
+		//someObjectWrapped.cloneWith(railoCL);
+		//var listener = createDynamicProxy(new MessageListener(), ["org.jivesoftware.smack.MessageListener"]);
+		var pc2 = javaCast("railo.runtime.PageContextImpl",pc);
+		dump(someObjectWrapped);
+		dump(pc.class.getClassLoader());
+		someObjectWrapped.getClass("org.jivesoftware.smack.MessageListener",cl.getLoader().getURLClassLoader());
+
+		classUtil = CreateObject("java","railo.commons.lang.ClassUtil");
+		caster = CreateObject("java","railo.runtime.op.Caster");
+		objStringClass = CreateObject("java","java.lang.Class").GetClass();
+		objReflect = CreateObject("java","java.lang.reflect.Array");
+		arrJavaValue = objReflect.NewInstance(objStringClass,JavaCast( "int",1 ));
+		objReflect.Set(arrJavaValue, JavaCast( "int",0 ), 
+			classUtil.loadClass(cl.getLoader().getURLClassLoader(),"org.jivesoftware.smack.MessageListener")
+		); 
+//dump(caster);
+		var JavaProxyFactory = createObject("java","railo.transformer.bytecode.util.JavaProxyFactory");
+		
+		dump(JavaProxyFactory);
+		dump(pc.getConfig());
+
+		//wee = JavaProxyFactory.createProxy(pc2.getConfig(),cfListener, nullValue(), arrJavaValue);
+		throw("FUUUUK");
+		var listener = createDynamicProxy(new MessageListener(), ["org.jivesoftware.smack.MessageListener"]);
+		var chat = variables.XMPPConnection.getChatManager().createChat( userName, listener );
+		arrayAppend(variables.chats[variables.connectionhash],chat);
+		chat.sendMessage( message );
+		return true;
+	}
+
+	function _sendMessage(user, message) {
+		try {
+			return _chat(user,message);
 		}
 		catch (any e) {
 			return false;
@@ -163,7 +248,6 @@ component {
 			jSASLAuthentication.registerSASLMechanism("X-FACEBOOK-PLATFORM", jSASLXFacebookPlatformMechanism.getClass());
 			jSASLAuthentication.supportSASLMechanism("X-FACEBOOK-PLATFORM",0);
 		}
-		variables.password = getFacebookToken(variables.userID, variables.password, variables.callbackURL);
 	}
 
 
@@ -190,7 +274,7 @@ component {
 			return theMethod(argumentCollection=args);
 		} catch (any e) {
 			try{
-				stopServer();
+				_stop();
 			} catch(any err) {}
 			jThread.currentThread().setContextClassLoader(cTL);
 			throw(e);
